@@ -1,0 +1,37 @@
+<configure xmlns="http://namespaces.zope.org/zope"
+           xmlns:browser="http://namespaces.zope.org/browser">
+
+  <adapter name="omnikassa_payment" factory=".omnikassapayment" />
+  
+  <browser:page
+    for="*"
+    name="omnikassa_payment"
+    class=".OmnikassaPay"
+    permission="zope2.View"
+  />
+
+  <browser:page
+    for="*"
+    name="omnikassa_payment_success"
+    template="success.pt"
+    class=".OmnikassaPaySuccess"
+    permission="zope2.View"
+  />
+  
+  <browser:page
+    for="*"
+    name="omnikassa_payment_failed"
+    template="failed.pt"
+    class=".OmnikassaPayFailed"
+    permission="zope2.View"
+  />
+
+  <browser:page
+    for="*"
+    name="omnikassa_payment_aborted"
+    template="aborted.pt"
+    class=".OmnikassaPayFailed"
+    permission="zope2.View"
+  />
+
+</configure>
