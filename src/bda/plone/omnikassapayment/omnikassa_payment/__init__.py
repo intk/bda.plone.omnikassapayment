@@ -34,18 +34,18 @@ from security import OmnikassaSignature
 import transaction
 import json
 
-from bda.plone.cart import is_ticket as is_context_ticket
 from plone.app.uuid.utils import uuidToCatalogBrain
+from plone import api
 
 logger = logging.getLogger('bda.plone.payment')
 _ = MessageFactory('bda.plone.payment')
 
-CREATE_PAY_INIT_URL = ""
-PSPID = ""
-SHA_IN_PASSWORD = ""
-SHA_OUT_PASSWORD = ""
+CREATE_PAY_INIT_URL = "https://payment-webinit.simu.omnikassa.rabobank.nl/paymentServlet"
+SECRET_KEY = ""
+MERCHANT_ID = ""
+KEYVERSION = 
 
-class omnikassapayment(Payment):
+class OmnikassaPayment(Payment):
     pid = 'omnikassa_payment'
     label = _('omnikassa_payment', 'Omnikassa Payment')
     
@@ -69,33 +69,27 @@ def perform_request(url, params=None):
         url = '%s?%s' % (url, query)
     return url
 
-def create_pay_init(pspid, ordernumber, currency, amount, language, accepturl, declineurl, exceptionurl, cancelurl, payment_method):
-    PM = None
-    
-    if payment_method == 'ideal':
-        PM = "iDEAL"
-    elif payment_method == 'creditcard':
-        PM = "CreditCard"
-    else:
-        PM = None
+def create_pay_init(secretKey, merchantID, keyVersion, currencyCode, amount, transactionReference, orderId, normalReturnUrl, automaticResponseUrl):
+
+    paymentMeanBrandList = ['ideal']
 
     params = {
-        'PSPID': pspid,
-        'ORDERID': ordernumber,
-        'CURRENCY': currency,
-        'AMOUNT': amount,
-        'LANGUAGE': language,
-        'ACCEPTURL': accepturl,
-        'DECLINEURL': declineurl,
-        'EXCEPTIONURL': exceptionurl,
-        'CANCELURL': cancelurl,
+        'Data': {
+            'currencyCode': currencyCode,
+            'merchantId': merchantID,
+            'keyVersion': keyVersion,
+            'amount': amount,
+            'transactionReference': transactionReference,
+            'orderId': orderId,
+            'normalReturnUrl': normalReturnUrl,
+            'automaticResponseUrl': automaticResponseUrl,
+            'paymentMeanBrandList': paymentMeanBrandList
+        },
+        'interfaceVersion': "HP_1.0"
     }
 
-    if PM:
-        params['PM'] = PM
-
-    signer = OmnikassaSignature(params, 'sha512', SHA_IN_PASSWORD)
-    params['SHASIGN'] = signer.signature()
+    signer = OmnikassaSignature(params['Data'], 'sha256', secretKey)
+    params['Seal'] = signer.signature()
 
     return perform_request(CREATE_PAY_INIT_URL, params)
 
@@ -106,19 +100,21 @@ class OmnikassaPay(BrowserView):
         payment_method = self.request.get('payment_method', '')
 
         try:
+            site_url = api.portal.get().absolute_url()
             data = IPaymentData(self.context).data(order_uid)
-            pspid = PSPID
-            language = self.getLanguage()
-            currency = data['currency']
+            secretKey = SECRET_KEY
+            merchantID = MERCHANT_ID
+            keyVersion = KEYVERSION
+            currencyCode = 978
             amount = data['amount']
-            description = data['description']
-            ordernumber = data['ordernumber']
+            transactionReference = data['ordernumber']
+            orderId = data['ordernumber']
+            normalReturnUrl = "%s/@@omnikassa_payment" %(base_url)
+            automaticResponseUrl = "%s/@@omnikassa_webhook" %(site_url)
+            redirect_url = create_pay_init(secretKey, merchantID, keyVersion, currencyCode, amount, transactionReference, orderId, normalReturnUrl, automaticResponseUrl)
 
-            accepturl = "%s/@@omnikassa_payment_success" %(base_url)
-            declineurl = '%s/@@omnikassa_payment_failed?uid=%s' % (base_url, order_uid)
-            exceptionurl = '%s/@@omnikassa_payment_failed?uid=%s' % (base_url, order_uid)
-            cancelurl = '%s/@@omnikassa_payment_aborted?uid=%s' % (base_url, order_uid)
-            redirect_url = create_pay_init(pspid, ordernumber, currency, amount, language, accepturl, declineurl, exceptionurl, cancelurl, payment_method)
+            print "REDIRECT URL:"
+            print redirect_url
 
         except Exception, e:
             logger.error(u"Could not initialize payment: '%s'" % str(e))
@@ -126,30 +122,8 @@ class OmnikassaPay(BrowserView):
                 % (base_url, order_uid)
         raise Redirect(redirect_url)
 
-    def getLanguage(self):
-        """
-        Omnikassa requires en_EN or en_US language id
-        We are parsing the request to get the right
-        Note: took this code from getpaid.ogone (thanks)
-        """
-        languages = IUserPreferredLanguages(self.context.REQUEST)
-        langs = languages.getPreferredLanguages()
-        if langs:
-            language = langs[0]
-        else:
-            plone_props = getToolByName(self.context, 'portal_properties')
-            language = plone_props.site_properties.default_language
-        language = language.split('-')
-        if len(language) == 1:
-            language.append(language[0])
-        language = language[:2]
-        return "_".join(language)
 
 class OmnikassaPaySuccess(BrowserView):
-
-    def is_ticket(self):
-        result = is_context_ticket(self.context)
-        return result
 
     def get_header_image(self, ticket):
         if ticket:

@@ -22,13 +22,13 @@ class OmnikassaSignature(object):
         valid = True
         if v == '':
             valid = False
-        if k == 'SHASIGN':
+        if k == 'Seal':
             valid = False
         return valid
 
     def _merge_data(self, data):
         pairs = ['%s=%s' % (k, v) for k, v in data]
-        pre_sign_string = self.secret.join(pairs) + self.secret
+        pre_sign_string = '|'.join(pairs) + self.secret
         return pre_sign_string
 
     def _sign_string(self, pre_sign_string):
