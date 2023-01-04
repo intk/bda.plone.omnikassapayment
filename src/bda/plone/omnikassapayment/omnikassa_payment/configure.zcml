@@ -17,6 +17,14 @@
     class=".OmnikassaPaySuccess"
     permission="zope2.View"
   />
+
+  <browser:page
+    for="*"
+    name="omnikassa_webhook"
+    template="success.pt"
+    class=".OmnikassaWebhook"
+    permission="zope2.View"
+  />
   
   <browser:page
     for="*"

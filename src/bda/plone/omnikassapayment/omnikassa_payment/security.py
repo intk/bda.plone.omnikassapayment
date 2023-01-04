@@ -1,4 +1,6 @@
 import hashlib, logging
+import hmac
+import base64
 
 log = logging.getLogger('bda.plone.payment')
 
@@ -7,33 +9,34 @@ class OmnikassaSignature(object):
         assert hash_method in ['sha1', 'sha256', 'sha512']
         assert str(secret)
 
-        self.data = data.copy()
+        self.data = data
         self.hash_method = hash_method
         self.secret = secret
 
     def _sort_data(self, data):
         # This code uppercases two times and is not well readable
-        sorted_data = [(k.upper(), v) for k, v in data.items() \
-                       if self._filter_data(k.upper(), v)]
-        sorted_data.sort(key=lambda x: x, reverse=False)
-        return sorted_data
+        """sorted_data = [(k, v) for k, v in data.items() \
+                       if self._filter_data(k, v)]
+        
+        sorted_data.sort(key=lambda x: x, reverse=False)"""
+        return data
 
     def _filter_data(self, k, v):
         valid = True
         if v == '':
             valid = False
-        if k == 'Seal':
+        if k == 'signature':
             valid = False
         return valid
 
     def _merge_data(self, data):
-        pairs = ['%s=%s' % (k, v) for k, v in data]
-        pre_sign_string = '|'.join(pairs) + self.secret
+        pairs = ['%s' %(v) for k, v in data]
+        pre_sign_string = ','.join(pairs)
         return pre_sign_string
 
     def _sign_string(self, pre_sign_string):
         hashmethod = getattr(hashlib, self.hash_method)
-        signed = hashmethod(pre_sign_string).hexdigest().upper()
+        signed = hmac.new(self.secret, msg=pre_sign_string, digestmod=hashmethod).hexdigest()
         return signed
 
     def signature(self):

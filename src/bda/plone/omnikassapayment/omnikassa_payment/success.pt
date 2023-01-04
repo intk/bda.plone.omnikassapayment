@@ -20,7 +20,7 @@
     <tal:block define="order_data view/verify;
                       verified python:order_data['verified'];
                       ticket python:order_data['ticket'];
-                      tickets python: view.is_ticket();
+                      tickets python: False;
                       header_image python: view.get_header_image(tickets)">
       
       <tal:verified condition="verified">
@@ -37,6 +37,10 @@
               <p><span i18n:translate="thanks_order">Hartelijk bedankt voor je bestelling!</span></p>
             </div>
 
+            <p>Deze wordt binnen 3-5 dagen via TPG Post verzonden.<br>
+                Binnen enkele minuten ontvangt u een bevestiging van uw bestelling per mail.<br>
+                Controleer je spam en ongewenste e-mail map wanneer je de e-mail niet ontvangen hebt.</p>
+
              <a href="" type="submit" tal:attributes="href python: order_data['download_link']" 
               class="payment_button" tal:condition="tickets"><i class="fa fa-download"></i> Download e-ticket(s)</a>
 
@@ -46,6 +50,8 @@
               <p i18n:translate="order_number_text" id="ordernumber_order_text">
                 <span i18n:translate="your_order">Je bestelling</span><span> (</span><span i18n:translate="ordernumber">ordernummer</span>: <strong tal:content="python: order_data['ordernumber']"></strong>) <span i18n:translate="order_success">is met succes afgerond.</span>
               </p>
+              
+
               <p id="spam_order_message">
                 <span i18n:translate="email_confirmation">Binnen enkele minuten ontvang je een e-mail met bestellingsbevestiging en je e-ticket(s) in de bijlage.</span>
                 <span i18n:translate="check_spam">Controleer je spam en ongewenste e-mail map wanneer je de e-mail niet ontvangen hebt.</span>

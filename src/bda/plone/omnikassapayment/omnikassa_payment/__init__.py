@@ -34,16 +34,25 @@ from security import OmnikassaSignature
 import transaction
 import json
 
+
 from plone.app.uuid.utils import uuidToCatalogBrain
 from plone import api
+
+import requests
+import datetime
+import base64
 
 logger = logging.getLogger('bda.plone.payment')
 _ = MessageFactory('bda.plone.payment')
 
-CREATE_PAY_INIT_URL = "https://payment-webinit.simu.omnikassa.rabobank.nl/paymentServlet"
-SECRET_KEY = ""
-MERCHANT_ID = ""
-KEYVERSION = 
+CREATE_PAY_INIT_URL = "https://betalen.rabobank.nl/omnikassa-api/"
+
+#REFRESH_TOKEN = "eyJraWQiOiIvKzdpVE5PL0FmSEhKN05kYmFWVGcyZTR6eXFjN3dYV3pFT08wcktoU0NJPSIsImFsZyI6IlJTMjU2In0.eyJta2lkIjoxMDE1MCwiZW52IjoiUyIsImV4cCI6NzI1ODAyODQwMH0.W4RFtP15ai3vWGESEPRElhLrmOPbI30krwRgEA-ECNo6gR0xngKDvUXevyRxuy4d7yqD8Bq71gC7fT8AFYWsnXdF7bDyuDtQyZF7l02NUMNA5fHkLZumbbZi167l5dNzUSNsQ0u_teeVSsitHmrbt_8wbMRskPdKiygfXZspUOwoEw_Fy5jIq3L1Pm4te9AgwvxYaXJe_c4Qhvy-sdUPaiTHBpwgeJlz1zIwUhLQpGIb4OL4SKG-nGLVRhJbBFEphA-fTpGIFtYdWxlRhh-SZeLoNqislXLEINQb6wWwvfEaxfJnE7-uh69INXBVI1VLTHlYguXX-Ld2Nnrk-t0uOg"
+#REFRESH_TOKEN = "eyJraWQiOiI0cnd5d2k4RWh5TDc5bVc0eUpsUXhsUUNtQzVqSmZFam00VnZQQ2NDVzBzPSIsImFsZyI6IlJTMjU2In0.eyJta2lkIjoxMDE1MSwiZW52IjoiUCIsImV4cCI6MTU5NDMzMjAwMH0.haLt1HeUqIJ9XoFk36y5TIAh0BPTSOdzCBWFH8a2Isd_i63lVP3TE47CP1nXJm7bZGTs3r200eRGJkocN41gTF1bUuMx_bB34E1nCC95QP0sl9CGASIAuRlQje67gjBCvxwhTs0TtRiHzaDP8r9mJiXhqst6KCQC50N4iOjcDhx_vlArwjQ_BSWNKBlQVqgFvdrW6dUSTNnS_HbGjBSYHa2upMIm44gP9f7-ThD6obIflhIt7tHpCkSZAlhng0KJkfr-KpB53eRQQkBsAYKc-vFyGi81WZuCku6I-d6wCuZoRrpwDiOT8X2DB0YFOOQ6k_UBYE8psCE07AfGik5AVQ"
+#SIGNING_KEY = base64.b64decode("4TD2QcxlGo9C8tUQLmOx1GOolrPCmNcItggZFfy/Cuo=")
+REFRESH_TOKEN = "eyJraWQiOiI0cnd5d2k4RWh5TDc5bVc0eUpsUXhsUUNtQzVqSmZFam00VnZQQ2NDVzBzPSIsImFsZyI6IlJTMjU2In0.eyJta2lkIjo0NjY1MywiZW52IjoiUCIsImV4cCI6MTY2MDA4MjQwMH0.f_qp3pJDicsE5kjwbhHJLLo05Mk0FzNnhRcxHWZQe7Lyno7KOK_tRPNJW9nRq2PneLcJLEybSahSvaZ8vXU0PC6-2My-3ht30JrWU9LS1aZCVZPcBCTKdbwfRMLIMiov7izpuC8GIWLPxkWgtsjRRn3JOBcoPNXXtsZGGZYcCo8n3ow8x7X_QbXSzQQK2NO4ZxHDik4jqwoTSLaXA22CZTo9_mPWGRw41bJJJCGFvzPluJQN-3Sps_VypVBa3SYQb3GS9npwQdRaGysdj1rg85jJu7zR7IlDYEfuMCgAGFQ_UfBbjcm58U_mwwoHfIwqUaxCFFu-wdoUz7erUKxPbg"
+#SIGNING_KEY = base64.b64decode("43TK6zsBU4io1b7p0hayzO0gKaGE1a2ebgE1dHjmaMc=")
+SIGNING_KEY = base64.b64decode("9TRMKaRZcRX6yNnqepB9nj+N7BFFVahxA5+JPjaUPew=")
 
 class OmnikassaPayment(Payment):
     pid = 'omnikassa_payment'
@@ -63,35 +72,59 @@ def shopmaster_mail(context):
     except:
         return ""
 
-def perform_request(url, params=None):
-    if params:
-        query = urllib.urlencode(params)
-        url = '%s?%s' % (url, query)
-    return url
 
-def create_pay_init(secretKey, merchantID, keyVersion, currencyCode, amount, transactionReference, orderId, normalReturnUrl, automaticResponseUrl):
+def get_access_token(url=CREATE_PAY_INIT_URL+'gatekeeper/refresh'):
+    headers = {"Authorization":"Bearer "+REFRESH_TOKEN}
+    url = requests.get(url, headers=headers)
+    if url:
+        response_json = url.json()
+        token = response_json.get('token', '')
+        return token
+    else:
+        return None
 
-    paymentMeanBrandList = ['ideal']
+def perform_request(url, data=None):
+    response = None
+    if data:
+        access_token = get_access_token()
 
-    params = {
-        'Data': {
-            'currencyCode': currencyCode,
-            'merchantId': merchantID,
-            'keyVersion': keyVersion,
-            'amount': amount,
-            'transactionReference': transactionReference,
-            'orderId': orderId,
-            'normalReturnUrl': normalReturnUrl,
-            'automaticResponseUrl': automaticResponseUrl,
-            'paymentMeanBrandList': paymentMeanBrandList
-        },
-        'interfaceVersion': "HP_1.0"
+        headers = {"Authorization":"Bearer "+access_token, 'Content-Type': 'application/json', 'user-agent': ''}
+        json_data = json.dumps(data)
+        response = requests.post(url, data=json.dumps(data), headers=headers)
+        return response
+
+    return response
+
+def create_pay_init(merchantOrderId, amount, merchantReturnUrl, paymentBrand, paymentBrandForce, automaticResponseUrl):
+    params = {}
+    
+    data = [
+        ('timestamp', datetime.datetime.now().isoformat()),
+        ('merchantOrderId', merchantOrderId),
+        ('currency', 'EUR'),
+        ('amount', amount),
+        ('language', 'NL'),
+        ('description', ''),
+        ('merchantReturnURL', merchantReturnUrl),
+        ('paymentBrand', 'IDEAL'),
+        ('paymentBrandForce', 'FORCE_ALWAYS')
+    ]
+
+    for key,value in data:
+        params[key] = value
+
+    currency = params.pop('currency', None)
+    total_amount = params.pop('amount', None)
+
+    params['amount'] = {
+        'amount': total_amount,
+        'currency': currency
     }
 
-    signer = OmnikassaSignature(params['Data'], 'sha256', secretKey)
-    params['Seal'] = signer.signature()
+    signer = OmnikassaSignature(data, 'sha512', SIGNING_KEY)
+    params['signature'] = signer.signature()
 
-    return perform_request(CREATE_PAY_INIT_URL, params)
+    return perform_request(CREATE_PAY_INIT_URL+"order/server/api/order", params)
 
 class OmnikassaPay(BrowserView):
     def __call__(self):
@@ -102,19 +135,16 @@ class OmnikassaPay(BrowserView):
         try:
             site_url = api.portal.get().absolute_url()
             data = IPaymentData(self.context).data(order_uid)
-            secretKey = SECRET_KEY
-            merchantID = MERCHANT_ID
-            keyVersion = KEYVERSION
-            currencyCode = 978
-            amount = data['amount']
-            transactionReference = data['ordernumber']
-            orderId = data['ordernumber']
-            normalReturnUrl = "%s/@@omnikassa_payment" %(base_url)
-            automaticResponseUrl = "%s/@@omnikassa_webhook" %(site_url)
-            redirect_url = create_pay_init(secretKey, merchantID, keyVersion, currencyCode, amount, transactionReference, orderId, normalReturnUrl, automaticResponseUrl)
 
-            print "REDIRECT URL:"
-            print redirect_url
+            merchantOrderId = data['ordernumber']
+            amount = str(data['amount'])
+            merchantReturnUrl = "%s/@@omnikassa_payment_success" %(base_url)
+            paymentBrand = 'IDEAL'
+            paymentBrandForce = 'FORCE_ONCE'
+            automaticResponseUrl = "%s/@@omnikassa_webhook" %(site_url)
+
+            response = create_pay_init(merchantOrderId, amount, merchantReturnUrl, paymentBrand, paymentBrandForce, automaticResponseUrl)
+            redirect_url = response.json().get('redirectUrl', '')
 
         except Exception, e:
             logger.error(u"Could not initialize payment: '%s'" % str(e))
@@ -122,6 +152,11 @@ class OmnikassaPay(BrowserView):
                 % (base_url, order_uid)
         raise Redirect(redirect_url)
 
+
+class OmnikassaWebhook(BrowserView):
+    def __call__(self):
+        data = self.request.form
+        return True
 
 class OmnikassaPaySuccess(BrowserView):
 
@@ -160,12 +195,13 @@ class OmnikassaPaySuccess(BrowserView):
 
 
     def verify(self):
+
         #
         # Get Payment details
         #
         # Get order
         order = None
-        tickets = is_context_ticket(self.context)
+        tickets = False
         skip_payment = False
 
         order_data = {
@@ -180,10 +216,14 @@ class OmnikassaPaySuccess(BrowserView):
         }
 
         data = self.request.form
-        ordernumber = data.get('orderID', '')
+        ordernumber = data.get('order_id', '')
+        status = data.get('status', '')
+        req_signature = data.get('signature', '')
+
         if ordernumber:
             order_uid = IPaymentData(self.context).uid_for(ordernumber)
-            if get_status_category(int(data['STATUS'])) != SUCCESS_STATUS:
+
+            if status not in ['COMPLETED']:
                 return order_data
         else:
             order_uid = data.get('order_uid', '')
@@ -205,7 +245,12 @@ class OmnikassaPaySuccess(BrowserView):
         #
         # SHA passphrase verification
         #
-        signer = OmnikassaSignature(data, 'sha512', SHA_OUT_PASSWORD)
+        signature_data = [
+            ('order_id', ordernumber),
+            ('status', status)
+        ]
+
+        signer = OmnikassaSignature(signature_data, 'sha512', SIGNING_KEY)
         payment = Payments(self.context).get('omnikassa_payment')
         
         if not order:
@@ -287,8 +332,7 @@ class OmnikassaPaySuccess(BrowserView):
             }
             return order_data
 
-        shasign = data.get('SHASIGN', '')
-        if shasign == signer.signature() or skip_payment:
+        if req_signature == signer.signature() or skip_payment:
             order_data['verified'] = True
             order = OrderData(self.context, uid=order_uid)
             order.salaried = ifaces.SALARIED_YES
